@@ -9,7 +9,9 @@ from cv_bridge import CvBridge
 from pathlib import Path
 import os
 import sys
+import math
 from rostopic import get_topic_type
+from rospy import Time
 
 from sensor_msgs.msg import Image, CompressedImage
 from detection_msgs.msg import BoundingBox, BoundingBoxes
@@ -109,6 +111,9 @@ class Yolov8_Tracking:
         
         # tracker
         self.prev_frames = None
+        self.prev_time = Time(0)
+        self.prev_distances = {}
+        
         tracker_type = rospy.get_param("~tracker_type")
         tracking_config = rospy.get_param("~tracking_config")
         reid_weights = rospy.get_param("~reid_weights")
@@ -118,10 +123,13 @@ class Yolov8_Tracking:
                                       device=self.device, 
                                       half=self.half)
         self._image_counter = 0
+        
+        
 
     def callback(self, data):
         """adapted from yolov5/detect.py"""
-        # print(data.header)
+        curr_time = data.header.stamp
+        
         im = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width,  -1)
         im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
         
@@ -172,15 +180,17 @@ class Yolov8_Tracking:
         curr_frames = im0
         prev_frames = self.prev_frames
         
+        # time_dif = (curr_time - self.prev_time).to_sec()
+        curr_time = curr_time.to_sec()
+        
         annotator = Annotator(im0, line_width=self.line_thickness, example=str(self.names))
-        
-        
         
         if hasattr(tracker, 'tracker') and hasattr(tracker, 'camera_update'):
             if prev_frames is not None and curr_frames is not None:  # camera motion compensation
                 tracker.camera_update(prev_frames, curr_frames)
                 
-            self.prev_frames = curr_frames
+        
+            
         
         if det is not None and len(det):
             shape = im0.shape
@@ -199,6 +209,7 @@ class Yolov8_Tracking:
                             # 255 if retina_masks else im[0]
                             im_gpu=im[0]
                         )
+                distances = self.prev_distances
                 for i, (output) in enumerate(outputs):
                     bbox = output[0:4]
                     id = output[4]
@@ -224,19 +235,35 @@ class Yolov8_Tracking:
                     # bounding_box.xmax = int(bbox[2])
                     # bounding_box.ymax = int(bbox[3])
                     
-                    if bbox[1] < 20:
-                        text_pos_y = bbox[1] + 30
-                    else:
-                        text_pos_y = bbox[1] - 10
-                        
-                    
                     
                     if self.names[c] in ['car', 'truck', 'bus', 'person']:
                         dist_calculator = calRelativeVal(img=im0, bbox = bbox)
                         x, y, z = dist_calculator.calculate_3d_coord()
-                        cv2.putText(im0, str(round(x/z, 2))+'m',
-                            (int(bbox[0]), int(text_pos_y)-15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
-                    
+                        dist_x = round((x/z),2)
+                        dist_y = round((y/z),2)
+                        curr_dist = round(math.sqrt((dist_x)**2 + (dist_y)**2),2)
+                        
+                        if (c, id) not in distances or distances[(c, id)] is None:
+                            distances[(c,id)] = []
+                            distances[(c,id)].append(dist_x)
+                            distances[(c,id)].append(dist_y)
+                            distances[(c,id)].append(curr_dist)
+                            distances[(c,id)].append(curr_time)
+                            cv2.putText(im0, str(curr_dist)+'m',
+                                            (int(bbox[0]), int(bbox[1] + 15 if bbox[1] <20 else bbox[1] - 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)                   
+                        else:
+                            prev_dist = distances[(c,id)]
+                            if curr_time - prev_dist[3] < 2 :
+                                speed_x = round((dist_x - prev_dist[0]) / (curr_time-prev_dist[3]),2)
+                                speed_y = round((dist_y - prev_dist[1]) / (curr_time-prev_dist[3]),2)
+                                speed = round((curr_dist - prev_dist[2]) / (curr_time-prev_dist[3]),2)
+                                cv2.putText(im0, str(speed)+'m/s',
+                                            (int(bbox[2]), int(bbox[1] + 35 if bbox[1] <20 else bbox[1] - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)  
+                            cv2.putText(im0, str(curr_dist)+'m',
+                                            (int(bbox[0]), int(bbox[1] + 15 if bbox[1] <20 else bbox[1] - 25)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+                            distances[(c,id)] = [dist_x, dist_y, curr_dist, curr_time]
+                self.prev_distances = distances        
+
                        
 
                     # bounding_boxes.bounding_boxes.append(bounding_box)
@@ -251,24 +278,25 @@ class Yolov8_Tracking:
                 #     ### POPULATE THE DETECTION MESSAGE HERE
             else:
                 pass
+            
+            
             # Stream results
             im0 = annotator.result()
             
-            
-
+           
+        self.prev_frames = curr_frames
+        self.prev_time = curr_time
         # Publish prediction
         # self.pred_pub.publish(bounding_boxes)
         
-        cv2.imshow("im0", im0)
-        cv2.waitKey(0)
+
         # Publish & visualize images
         if self.view_image:
             img_filename = "/root/catkin_ws/src/yolov8_ros/result/result_image_{:03d}.png".format(self._image_counter)
             bev_filename = "/root/catkin_ws/src/yolov8_ros/result/bev/bev_image_{:03d}.png".format(self._image_counter)
-            
-            #cv2.imwrite(bev_filename, bev)
+            cv2.imwrite(img_filename, im0)
+            cv2.imwrite(bev_filename, bev)
             self._image_counter += 1
-        
             
             # cv2.imshow(str(0), im0)
             # cv2.waitKey(1)  # 1 millisecond
