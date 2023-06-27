@@ -1,5 +1,5 @@
 <launch>
-  <node pkg="rosbag" type ="play" name="rosbag_play" args="$(find yolov8_ros)/traffic_light2.bag" />
+  
   
   <!-- Detection configuration -->
   <arg name="weights" default="$(find yolov8_ros)/src/yolov8s-seg.pt"/>
@@ -21,8 +21,11 @@
   <arg name="view_image" default="true"/>
 
   <!-- ROS topics -->
-  <arg name="input" default="/vds_node_localhost_2212/image_raw"/>
+  <arg name="input" default="/vds_node_localhost_2210/image_raw"/>
+  <arg name="gt" default="/gt_5"/>
   <arg name="output_topic" default="/yolov5/detections"/>
+  <arg name="bagfile" default="$(find yolov8_ros)/my_bag_record.bag --wait-for-subscribers"/>
+
 
   <!-- Tracker Option topic-->
   <arg name="tracker_type" default="ocsort"/>
@@ -49,6 +52,7 @@
     <param name="half" value="$(arg half)"/>
 
     <param name="input" value="$(arg input)"/>
+    <param name="gt" value="$(arg gt)"/>
     <param name="output_topic" value="$(arg output_topic)"/>
 
     <param name="view_image" value="$(arg view_image)"/>
@@ -63,4 +67,6 @@
     <param name="publish_image" value="$(arg publish_image)"/>
     <param name="output_image_topic" value="$(arg output_image_topic)"/>
   </node>
+  <node pkg="rosbag" type ="play" name="rosbag_play" args="$(arg bagfile)" />
+   
 </launch>
