@@ -14,19 +14,22 @@ class Evaluator():
     def __init__(self, preds, gts):
         self.preds = preds
         self.gts = gts
-        self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "person", 4: "traffic sign", 5: "traffic light"}
+        self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "person", 4: "stop sign", 5: "traffic_light"}
         self.rd_x_e = []
         self.rd_y_e = []
-
+        self.classes = []
         self.pred_boxes, self.gt_boxes = self.preprocess(self.preds, self.gts) 
         # print(self.pred_boxes)
         # print(self.gt_boxes)   
         self.mAP = self.calculate_mAP(self.pred_boxes, self.gt_boxes)
+        print(self.rd_x_e)
+        print(self.rd_y_e)
+
         self.rdx_mse, self.rdy_mse = self.rel_dist_MSE(self.rd_x_e, self.rd_y_e)
 
         print("mAP: ", self.mAP)
-        print("rdx_E: ", self.rdx_mse, "m")
-        print("rdy_E: ", self.rdy_mse, "m")
+        print("rdx_MAE: ", self.rdx_mse, "m")
+        print("rdy_MAE: ", self.rdy_mse, "m")
 
 
     def preprocess(self, preds, gts):
@@ -34,15 +37,17 @@ class Evaluator():
         pred_boxes = []
         gts = gts[1:]
         preds = preds[:-1]
-
+        
         for gt in gts:
             for g in gt:
                 if g:
                     if g[0] > 0:
                         g[0] = g[0] - 1
                         g[5] = self.cls_dict[g[5]]
+                        if g[5] not in self.classes:
+                            self.classes.append(g[5])
                         gt_boxes.append(g)
-        
+
         for pred in preds:
             if pred:
                 for p in pred:
@@ -79,8 +84,8 @@ class Evaluator():
         epsilon = 1e-6 # ???
 
         # classes = ['car', 'truck', 'person', 'traffic light', 'traffic sign', 'bicycle']
-        classes = ['car']
-        for c in classes:
+        # classes = ['car', 'traffic_light']
+        for c in self.classes:
             detections = []
             ground_truths = []
 
@@ -119,15 +124,16 @@ class Evaluator():
                     if iou > best_iou: #ground truth들과의 iou중 가장 높은놈의 iou를 저장
                         best_iou = iou
                         best_gt_idx = idx # 인덱스도 저장
-                
                 if best_iou > iou_threshold: # 그 iou가 threshold 이상이면 헤당 인덱스에 TP = 1 저장, 이하면 FP = 1 저장 
                     if amount_bboxes[detection[0]][best_gt_idx] == 0:
                         TP[detection_idx] = 1
                         amount_bboxes[detection[0]][best_gt_idx] = 1
-
-                        self.rd_x_e.append(abs(ground_truth_boxes[best_gt_idx][7] - detection[7]))
-                        self.rd_y_e.append(abs(ground_truth_boxes[best_gt_idx][8] - detection[8]))
-
+                        if c in ["car", "truck", "person", "cyclist"]:
+                            # self.rd_x_e.append((detection[0], ground_truth_boxes[best_gt_idx][7], detection[7]))
+                            # self.rd_y_e.append((ground_truth_boxes[best_gt_idx][8], detection[8]))
+                            # if ground_truth_boxes[best_gt_idx][7] < 43 and ground_truth_boxes[best_gt_idx][8] < 15:
+                            self.rd_x_e.append(abs(ground_truth_boxes[best_gt_idx][7] - detection[7]))
+                            self.rd_y_e.append(abs(ground_truth_boxes[best_gt_idx][8] - detection[8]))
                     else:
                         FP[detection_idx] = 1 # 이미 해당 물체를 detect한 물체가 있다면 즉 인덱스 자리에 이미 TP가 1이라면 FP=1적용
                 else:
