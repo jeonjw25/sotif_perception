@@ -2,8 +2,8 @@
   
   
   <!-- Detection configuration -->
-  <arg name="weights" default="$(find yolov8_ros)/src/yolov8s-seg.pt"/>
-  <arg name="data" default="$(find yolov8_ros)/src/yolov8_tracking/yolov8/ultralytics/yolo/data/datasets/coco128-seg.yaml"/>
+  <arg name="weights" default="$(find yolov8_ros)/src/yolov8m.pt"/>
+  <arg name="data" default="$(find yolov8_ros)/src/yolov8_tracking/yolov8/ultralytics/yolo/data/datasets/sotif.yaml"/>
   <arg name="confidence_threshold" default="0.5"/>
   <arg name="iou_threshold" default="0.5"/>
   <arg name="maximum_detections" default="1000"/>
