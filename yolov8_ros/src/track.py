@@ -34,6 +34,7 @@ if str(ROOT / 'trackers' / 'strongsort') not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 # import from yolov5 submodules
+from ultralytics import YOLO
 from yolov8.ultralytics.nn.autobackend import AutoBackend
 from yolov8.ultralytics.yolo.data.dataloaders.stream_loaders import LoadImages, LoadStreams
 from yolov8.ultralytics.yolo.data.utils import IMG_FORMATS, VID_FORMATS
@@ -51,7 +52,7 @@ from trackers.multi_tracker_zoo import create_tracker
 from homography import calRelativeVal
 from classify_traffic_light import classify_traffic_light
 from utils import calculate_curvature
-
+from ultralytics import YOLO
 
 @torch.no_grad()
 
@@ -84,6 +85,7 @@ class Yolov8_Tracking:
         
         # Initialize device
         self.model = AutoBackend(weights, device=self.device, dnn=rospy.get_param("~dnn"), fp16=bool(rospy.get_param("~data")))
+        # self.model = YOLO(weights)
         self.stride, self.names, self.pt, self.jit, self.onnx, self.engine = (
             self.model.stride,
             self.model.names,
@@ -125,7 +127,7 @@ class Yolov8_Tracking:
         self.prev_frames = None
         self.prev_time = Time(0)
         self.prev_distances = {}
-        
+        print(self.device)
         tracker_type = rospy.get_param("~tracker_type")
         tracking_config = rospy.get_param("~tracking_config")
         reid_weights = rospy.get_param("~reid_weights")
@@ -146,6 +148,7 @@ class Yolov8_Tracking:
             print("gt_num: ", self.num2)
             self.num2 += 1
         self.flag = False
+
     def callback(self, data):
         """adapted from yolov5/detect.py"""
         if not self.flag:
@@ -182,13 +185,13 @@ class Yolov8_Tracking:
                 
             pred = self.model(im, augment=False, visualize=False)
             
-            
+          
             # seg
-            masks = []
+            # masks = []
             p = non_max_suppression(
                 pred[0], self.conf_thres, self.iou_thres, self.classes, self.agnostic_nms, max_det=self.max_det, nm=32
             )
-            proto = pred[1][-1] if len(pred[1]) == 3 else pred[1]
+            # proto = pred[1][-1] if len(pred[1]) == 3 else pred[1]
             
             
             ### To-do move pred to CPU and fill BoundingBox messages
@@ -196,15 +199,6 @@ class Yolov8_Tracking:
             # Process predictions 
             det = p[0]
             
-            
-            # a = det[:,5]
-            # a = torch.tensor(a, device=self.device, dtype=torch.float32) / 255.0  # shape(n,3)
-            # print(a.shape)
-            # a = a[:, None, None]  # shape(n,1,1,3)
-            # print(a.shape)
-            # bounding_boxes = BoundingBoxes()
-            # bounding_boxes.header = data.header
-            # bounding_boxes.image_header = data.header
             prev_frames = self.prev_frames
             curr_frames = im0
             
@@ -227,7 +221,7 @@ class Yolov8_Tracking:
             if det is not None and len(det):
                 shape = im0.shape
                 # scale bbox first the crop masks
-                masks.append(process_mask(proto[0], det[:, 6:], det[:, :4], im.shape[2:], upsample=True))  # HWC
+                #masks.append(process_mask(proto[0], det[:, 6:], det[:, :4], im.shape[2:], upsample=True))  # HWC
                 det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], shape).round()  # rescale boxes to im0 size
                 
                 outputs = tracker.update(det.cpu(),im0)
@@ -235,13 +229,13 @@ class Yolov8_Tracking:
                 # retina_masks = False
                 
                 if len(outputs) > 0:
-                    annotator.masks(
-                                masks[0],
-                                colors=[colors(x, True) for x in det[:, 5]],
-                                # im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(device).permute(2, 0, 1).flip(0).contiguous() /
-                                # 255 if retina_masks else im[0]
-                                im_gpu=im[0]
-                            )
+                    # annotator.masks(
+                    #             masks[0],
+                    #             colors=[colors(x, True) for x in det[:, 5]],
+                    #             # im_gpu=torch.as_tensor(im0, dtype=torch.float16).to(device).permute(2, 0, 1).flip(0).contiguous() /
+                    #             # 255 if retina_masks else im[0]
+                    #             im_gpu=im[0]
+                    #         )
                     distances = self.prev_distances
                     
                     for i, (output) in enumerate(outputs):
