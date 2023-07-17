@@ -5,6 +5,7 @@
   <arg name="weights" default="$(find yolov8_ros)/src/n200_best.pt"/>
   <arg name="data" default="$(find yolov8_ros)/src/yolov8_tracking/yolov8/ultralytics/yolo/data/datasets/sotif.yaml"/>
   <arg name="device" default="0"/>
+  
   <!-- replace imgsz -->
   <arg name="inference_size_h" default="1080"/>
   <arg name="inference_size_w" default="1920"/>
@@ -14,7 +15,9 @@
   <arg name="input" default="/vds_node_localhost_2210/image_raw"/>
   <arg name="gt" default="/gt_5"/>
   <arg name="output_topic" default="/yolov5/detections"/>
-  <arg name="bagfile" default="$(find yolov8_ros)/my_bag_record.bag --wait-for-subscribers"/>
+  <arg name="bagfile" default="no1"/>
+  <arg name="iter" default="1"/>
+
 
   <!-- Optional topic (publishing annotated image) -->
   <arg name="publish_image" default="false"/>
@@ -25,7 +28,10 @@
     <param name="weights" value="$(arg weights)"/>
     <param name="data" value="$(arg data)"/>
     <param name="device" value="$(arg device)" />
-
+    <param name="bagfile" value="$(arg bagfile)">
+    <param name="iter" value="$(arg iter)">
+    
+    <param name="device" value="$(arg device)" />
     <param name="input" value="$(arg input)"/>
     <param name="gt" value="$(arg gt)"/>
     <param name="output_topic" value="$(arg output_topic)"/>
@@ -35,8 +41,8 @@
 
     <param name="publish_image" value="$(arg publish_image)"/>
     <param name="output_image_topic" value="$(arg output_image_topic)"/>
-    
+
   </node>
-  <node pkg="rosbag" type ="play" name="rosbag_play" args="$(arg bagfile)" />
+  <!-- <node pkg="rosbag" type ="play" name="rosbag_play" args="$(arg bagfile)" /> -->
    
 </launch>
