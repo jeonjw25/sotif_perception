@@ -14,7 +14,7 @@ from cv_bridge import CvBridge
 import cv2
 from ultralytics import YOLO
 from sensor_msgs.msg import Image, CompressedImage
-from detection_msgs.msg import BoundingBox, BoundingBoxes
+from detection_msgs.msg import BoundingBox, BoundingBoxes, dist_BoundingBox, dist_BoundingBoxes
 from cam_calibration.msg import gt_5
 # from trackers.multi_tracker_zoo import create_tracker
 from evaluator import Evaluator
@@ -36,15 +36,23 @@ if str(ROOT / 'yolov8') not in sys.path:
 if str(ROOT / 'trackers' / 'strongsort') not in sys.path:
     sys.path.append(str(ROOT / 'trackers' / 'strongsort'))  # add strong_sort ROOT to PATH
 
+save_path = '/root/catkin_ws/src/yolov8_ros/result/'
+
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 @torch.no_grad()
 
+
 class Yolov8_Tracking:
     global gt_list
     global pred_list
+    global bag_name
+    global iters
     gt_list = [] 
     pred_list = []
+    bag_name = ""
+    iters = ""
+
     def __init__(self):
         self.device = 'cuda:' + str(rospy.get_param("~device",""))
         self.num = 0
@@ -57,7 +65,7 @@ class Yolov8_Tracking:
         self.img_size_h = rospy.get_param("~inference_size_h")
         self.img_size = [self.img_size_h, self.img_size_w]
         self.model = YOLO(weights)
-        self.cls_dict = {0: "car", 1: "truck", 2: "traffic_light", 3: "pedestrian", 4: "stop_sign", 5: "cyclist"}
+        self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "pedestrian", 4: "stop_sign", 5: "traffic_light"}
         self.flag = True
         # Initialize CV_Bridge
         self.bridge = CvBridge()
@@ -65,7 +73,12 @@ class Yolov8_Tracking:
         self.prev_frames = None
         self.prev_time = Time(0)
         self.prev_distances = {}
-
+        self.BoundingBoxes = BoundingBoxes()
+        self.BoundingBox = BoundingBox()
+        self.dist_BoundingBox = dist_BoundingBox()
+        self.dist_BoundingBoxes = dist_BoundingBoxes()
+        self.iters = rospy.get_param("~iter")
+        self.bag_name = rospy.get_param("~bagfile")
         self.seq = 0
 
         # Initialize subscriber to Image/CompressedImage topic
@@ -75,26 +88,11 @@ class Yolov8_Tracking:
         self.gt_sub = rospy.Subscriber(
                 rospy.get_param("~gt"), gt_5, self.callback_gt, queue_size=100)
 
-        # self.image_sub = message_filters.Subscriber(
-        #         rospy.get_param("~input"), Image)
-        
-        # self.gt_sub = message_filters.Subscriber(
-        #                 rospy.get_param("~gt"), gt_5)
-
-        # ats = message_filters.ApproximateTimeSynchronizer([self.image_sub, self.gt_sub], 
-        #                                                   queue_size=100, slop=10, allow_headerless=True)
-        # ats.registerCallback(self.callback)
-        
-        # rospy.sleep(3)
         
         # Initialize image publisher
         self.publish_image = rospy.get_param("~publish_image")
-        if self.publish_image:
-            self.image_pub = rospy.Publisher(
-                rospy.get_param("~output_image_topic"), Image, queue_size=10)
         
-
-        print("callback")
+        
 
     def callback_gt(self, data):
         if self.flag:
@@ -108,11 +106,9 @@ class Yolov8_Tracking:
         """adapted from yolov5/detect.py"""
         
         if self.flag:
-            # self.gt = gt_5
-            # self.num2 += 1
-            # print("gt_num: ", self.num2)
             self.seq = image.header.seq
             
+
             curr_time = image.header.stamp
             detected_boxes = []
             im = np.frombuffer(image.data, dtype=np.uint8).reshape(image.height, image.width,  -1)
@@ -135,16 +131,20 @@ class Yolov8_Tracking:
             total_obj_num = len(preds[0].boxes.cls)
             
             if total_obj_num > 0:
+                id = ""
                 distances = self.prev_distances
                 for i in range(total_obj_num):
                     cls = int(objects.cls[i])
                     xyxy = objects.xyxy[i]
                     conf = float(objects.conf[i])
-                    id = objects.id[i]
+                
                     dist_x, dist_y = 0, 0
 
                     # relative distance
                     if cls in [0, 1, 3, 5]:
+                        if objects.id is not None:
+                            if objects.id[i]:
+                                id = int(objects.id[i])
                         dist_calculator = calRelativeVal(img=im0, bbox = xyxy)
 
                         dist_x, dist_y = dist_calculator.calculate_3d_coord()
@@ -180,12 +180,21 @@ class Yolov8_Tracking:
                     im = cv2.putText(im, f"id {id}_" + self.cls_dict[cls], (int(xyxy[0])+13, int(xyxy[1])+13), cv2.FONT_HERSHEY_DUPLEX, 1, (255,0,0), 2)
                     
                     detected.append([self.num, int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3]), self.cls_dict[cls], conf, dist_x, dist_y])
-            # print(detected)    
+                    self.BoundingBox.obj = [self.num, int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3]), self.cls_dict[cls], conf, dist_x, dist_y]
+                    self.BoundingBoxes.bounding_boxes.append(BoundingBox)
+            if rospy.get_param("~input") == "disturbance_image":
+                self.output_pub = rospy.Publisher(
+                    "disturbance_outputs", BoundingBoxes, queue_size=10)
+            else:
+                self.output_pub = rospy.Publisher(
+                    "outputs", BoundingBoxes, queue_size=10)
+            # print(self.BoundingBoxes.bounding_boxes)    
             pred_list.append(detected)
             
 
             gts = []
             # print(self.gt.obj_1)
+          
             gts.append(list(self.gt.obj_1))
             gts.append(list(self.gt.obj_2))
             gts.append(list(self.gt.obj_3))
@@ -221,15 +230,15 @@ class Yolov8_Tracking:
                     bbox = [xmin, ymin, xmax, ymax]
                     gt = [self.num, xmin, ymin, xmax, ymax, g[0], 1, round(g[5], 2), round(g[6],2)]
                     
-                    # im = cv2.rectangle(im, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
+                    im = cv2.rectangle(im, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
                 else:
                     gt = []
                 gts_.append(gt)
             
             gt_list.append(gts_)
             # if self.num >= 1:
-                # for gt in gt_list[self.num - 1]:
-                    # print(gt)
+            #     for gt in gt_list[self.num - 1]:
+            #         print(gt)
                     # for t in gt:
                     #     if t[0] != -1:
                     #         cnt2 += 1
@@ -239,10 +248,14 @@ class Yolov8_Tracking:
                     #         ymax = int(t[2] + (t[4]/2))
                     #         bbox = [xmin, ymin, xmax, ymax]
                     #         im = cv2.rectangle(im, (xmin, ymin), (xmax, ymax), (0, 255, 0), 4)
-        cv2.imshow("im", im)
-        cv2.waitKey(1)
-        img_filename = "/root/catkin_ws/src/yolov8_ros/result/result_image_{:d}.png".format(self.num)
-        cv2.imwrite(img_filename, im)  
+        # cv2.imshow("im", im)
+        # cv2.waitKey(1)
+        filename = "result_image_{:d}.png".format(self.num)
+        save_path = f'/root/catkin_ws/src/yolov8_ros/result/{self.bag_name}/{self.iters}'
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        file_path = os.path.join(save_path, filename)
+        cv2.imwrite(file_path, im)  
         print("img_num: ", self.num)
         self.num += 1           
         self.flag = True
@@ -254,7 +267,6 @@ if __name__ == "__main__":
     detector = Yolov8_Tracking()
     
     rospy.spin()
-    # print(len(gt_list), gt_list)
-    # print(len(pred_list), pred_list)
-
-    evaluator = Evaluator(preds=pred_list, gts=gt_list)
+    
+    # print(detector.bag_name, detector.iters)
+    evaluator = Evaluator(preds=pred_list, gts=gt_list, bag_name=detector.bag_name, iters= detector.iters)

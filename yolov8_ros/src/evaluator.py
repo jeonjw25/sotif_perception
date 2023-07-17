@@ -8,28 +8,45 @@ import torch
 
 from collections import Counter
 import numpy as np
-
+import os
 
 class Evaluator():
-    def __init__(self, preds, gts):
+    def __init__(self, preds, gts, bag_name, iters):
         self.preds = preds
         self.gts = gts
         self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "person", 4: "stop sign", 5: "traffic_light"}
         self.rd_x_e = []
         self.rd_y_e = []
         self.classes = []
+        self.iters = iters
+        self.bag_name = bag_name
+        self.dir_path = f'/root/catkin_ws/src/yolov8_ros/result'
+        self.file_name = f'{self.bag_name}_result.txt'
         self.pred_boxes, self.gt_boxes = self.preprocess(self.preds, self.gts) 
         # print(self.pred_boxes)
         # print(self.gt_boxes)   
         self.mAP = self.calculate_mAP(self.pred_boxes, self.gt_boxes)
-        print(self.rd_x_e)
-        print(self.rd_y_e)
-
+        # print(len(self.rd_x_e))
+        
         self.rdx_mse, self.rdy_mse = self.rel_dist_MSE(self.rd_x_e, self.rd_y_e)
-
+        
         print("mAP: ", self.mAP)
         print("rdx_MAE: ", self.rdx_mse, "m")
         print("rdy_MAE: ", self.rdy_mse, "m")
+
+        file_path = os.path.join(self.dir_path, self.file_name)
+
+        if not os.path.exists(self.dir_path):
+            os.makedirs(self.dir_path)
+
+        with open(file_path, 'a') as file:
+            file.write(f'{self.iters}th: ')
+            file.write(f'mAP: {self.mAP}  ')
+            file.write(f'rd_x_MAE: {self.rdx_mse}  ')
+            file.write(f'rd_y_MAE: {self.rdy_mse} \n')
+            #file.write("\n")
+
+
 
 
     def preprocess(self, preds, gts):
@@ -131,9 +148,9 @@ class Evaluator():
                         if c in ["car", "truck", "person", "cyclist"]:
                             # self.rd_x_e.append((detection[0], ground_truth_boxes[best_gt_idx][7], detection[7]))
                             # self.rd_y_e.append((ground_truth_boxes[best_gt_idx][8], detection[8]))
-                            # if ground_truth_boxes[best_gt_idx][7] < 43 and ground_truth_boxes[best_gt_idx][8] < 15:
-                            self.rd_x_e.append(abs(ground_truth_boxes[best_gt_idx][7] - detection[7]))
-                            self.rd_y_e.append(abs(ground_truth_boxes[best_gt_idx][8] - detection[8]))
+                            if ground_truth_boxes[best_gt_idx][7] < 43 and ground_truth_boxes[best_gt_idx][8] < 15:
+                                self.rd_x_e.append(abs(ground_truth_boxes[best_gt_idx][7] - detection[7]))
+                                self.rd_y_e.append(abs(ground_truth_boxes[best_gt_idx][8] - detection[8]))
                     else:
                         FP[detection_idx] = 1 # 이미 해당 물체를 detect한 물체가 있다면 즉 인덱스 자리에 이미 TP가 1이라면 FP=1적용
                 else:

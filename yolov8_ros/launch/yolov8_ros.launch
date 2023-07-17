@@ -28,8 +28,8 @@
     <param name="weights" value="$(arg weights)"/>
     <param name="data" value="$(arg data)"/>
     <param name="device" value="$(arg device)" />
-    <param name="bagfile" value="$(arg bagfile)">
-    <param name="iter" value="$(arg iter)">
+    <param name="bagfile" value="$(arg bagfile)"/>
+    <param name="iter" value="$(arg iter)"/>
     
     <param name="device" value="$(arg device)" />
     <param name="input" value="$(arg input)"/>
