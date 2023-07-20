@@ -142,9 +142,9 @@ class Yolov8_Tracking:
 
                     # relative distance
                     if cls in [0, 1, 3, 5]:
-                        if objects.id is not None:
-                            if objects.id[i]:
-                                id = int(objects.id[i])
+                        # if objects.id is not None:
+                        #     if objects.id[i]:
+                        id = int(objects.id[i])
                         dist_calculator = calRelativeVal(img=im0, bbox = xyxy)
 
                         dist_x, dist_y = dist_calculator.calculate_3d_coord()

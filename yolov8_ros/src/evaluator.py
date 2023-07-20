@@ -14,7 +14,7 @@ class Evaluator():
     def __init__(self, preds, gts, bag_name, iters):
         self.preds = preds
         self.gts = gts
-        self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "person", 4: "stop sign", 5: "traffic_light"}
+        self.cls_dict = {0: "car", 1: "truck", 2: "cyclist", 3: "pedestrian", 4: "stop_sign", 5: "traffic_light"}
         self.rd_x_e = []
         self.rd_y_e = []
         self.classes = []
@@ -22,9 +22,11 @@ class Evaluator():
         self.bag_name = bag_name
         self.dir_path = f'/root/catkin_ws/src/yolov8_ros/result'
         self.file_name = f'{self.bag_name}_result.txt'
+        self.file_name2 = f'{self.bag_name}_rdx_rdy_result.txt'
         self.pred_boxes, self.gt_boxes = self.preprocess(self.preds, self.gts) 
         # print(self.pred_boxes)
-        # print(self.gt_boxes)   
+        # print(self.gt_boxes)
+           
         self.mAP = self.calculate_mAP(self.pred_boxes, self.gt_boxes)
         # print(len(self.rd_x_e))
         
@@ -35,6 +37,7 @@ class Evaluator():
         print("rdy_MAE: ", self.rdy_mse, "m")
 
         file_path = os.path.join(self.dir_path, self.file_name)
+        file_path2 = os.path.join(self.dir_path, self.file_name2)
 
         if not os.path.exists(self.dir_path):
             os.makedirs(self.dir_path)
@@ -45,8 +48,12 @@ class Evaluator():
             file.write(f'rd_x_MAE: {self.rdx_mse}  ')
             file.write(f'rd_y_MAE: {self.rdy_mse} \n')
             #file.write("\n")
-
-
+        
+        with open(file_path2, 'a') as file:
+            for i in self.pred_boxes:
+                file.write(f'{i}\n')
+            file.write('\n')
+            
 
 
     def preprocess(self, preds, gts):
@@ -96,7 +103,7 @@ class Evaluator():
         iou = inter / (box1_area + box2_area - inter)
         return iou
     
-    def calculate_mAP(self, pred_boxes, gt_boxes, iou_threshold = 0.3):
+    def calculate_mAP(self, pred_boxes, gt_boxes, iou_threshold = 0.4):
         AP = [] # array containing AP of each class
         epsilon = 1e-6 # ???
 
@@ -145,7 +152,7 @@ class Evaluator():
                     if amount_bboxes[detection[0]][best_gt_idx] == 0:
                         TP[detection_idx] = 1
                         amount_bboxes[detection[0]][best_gt_idx] = 1
-                        if c in ["car", "truck", "person", "cyclist"]:
+                        if c in ["car", "truck", "pedestrian", "cyclist"]:
                             # self.rd_x_e.append((detection[0], ground_truth_boxes[best_gt_idx][7], detection[7]))
                             # self.rd_y_e.append((ground_truth_boxes[best_gt_idx][8], detection[8]))
                             if ground_truth_boxes[best_gt_idx][7] < 43 and ground_truth_boxes[best_gt_idx][8] < 15:
